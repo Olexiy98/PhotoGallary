@@ -1,12 +1,14 @@
 package com.example.olexi.photogallery.fragment;
 
 import android.content.Context;
+import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
 import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
 import android.os.AsyncTask;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.support.annotation.NonNull;
@@ -26,15 +28,17 @@ import android.widget.ImageView;
 import android.widget.Toast;
 
 import com.example.olexi.photogallery.R;
+import com.example.olexi.photogallery.activity.PhotoPageActivity;
 import com.example.olexi.photogallery.http.FlickrFetchr;
 import com.example.olexi.photogallery.models.GalleryItem;
 import com.example.olexi.photogallery.preference.QueryPreferences;
+import com.example.olexi.photogallery.service.PollService;
 import com.example.olexi.photogallery.thread.ThumbnailDownloader;
 
 import java.util.ArrayList;
 import java.util.List;
 
-public class PhotoGalleryFragment extends Fragment {
+public class PhotoGalleryFragment extends VisibleFragment {
 
     private static final String TAG = "PhotoGalleryFragment";
 
@@ -94,6 +98,13 @@ public class PhotoGalleryFragment extends Fragment {
         final SearchView searchView = (SearchView) searchItem.getActionView();
         searchView.setOnQueryTextListener(mSearchQueryTextListener);
         searchView.setOnSearchClickListener(mSearchClickListener);
+
+        MenuItem toggleItem = menu.findItem(R.id.menu_item_toggle_polling);
+        if(PollService.isServiceAlarmOn(getActivity())){
+            toggleItem.setTitle(R.string.stop_polling);
+        }else {
+            toggleItem.setTitle(R.string.start_polling);
+        }
     }
 
     @Override
@@ -102,6 +113,11 @@ public class PhotoGalleryFragment extends Fragment {
             case R.id.menu_item_clear:
                 QueryPreferences.setStoredQuery(getActivity(), null);
                 updateItems();
+                return true;
+            case R.id.menu_item_toggle_polling:
+                boolean shouldStartAlarm = !PollService.isServiceAlarmOn(getActivity());
+                PollService.setServiceAlarm(getActivity(), shouldStartAlarm);
+                getActivity().invalidateOptionsMenu();
                 return true;
             default:
                 return super.onOptionsItemSelected(item);
@@ -184,17 +200,30 @@ public class PhotoGalleryFragment extends Fragment {
         }
     }
 
-    private class ActivityHolder extends RecyclerView.ViewHolder{
+    private class ActivityHolder extends RecyclerView.ViewHolder
+    implements View.OnClickListener{
 
         private ImageView mImageView;
+        private GalleryItem mGalleryItem;
 
         public ActivityHolder(View itemView) {
             super(itemView);
             mImageView = itemView.findViewById(R.id.iv_photo_gallery);
+            mImageView.setOnClickListener(this);
         }
 
         public void bindView(Drawable drawable){
            mImageView.setImageDrawable(drawable);
+        }
+
+        public void bindGalleryItem(GalleryItem galleryItem){
+            mGalleryItem = galleryItem;
+        }
+
+        @Override
+        public void onClick(View v) {
+            Intent intent = PhotoPageActivity.newIntent(getActivity(),mGalleryItem.getPhotoPageUri());
+            startActivity(intent);
         }
     }
 
@@ -218,6 +247,7 @@ public class PhotoGalleryFragment extends Fragment {
             GalleryItem item = items.get(position);
             Drawable placeHolder = getResources().getDrawable(android.R.drawable.ic_media_ff);
             holder.bindView(placeHolder);
+            holder.bindGalleryItem(item);
             mThumbnailDownloader.queueThumbnail(holder,item.getUrl());
         }
 
